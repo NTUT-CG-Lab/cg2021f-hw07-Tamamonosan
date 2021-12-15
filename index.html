@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+	<meta charset="utf-8">
+	<title> 作業七範例程式 </title>
+
+	<style>
+		div {
+			margin-bottom: 20px;
+		}
+
+		.my-btn {
+			padding: 10px 20px;
+			color: white;
+			border-radius: 5px;
+			text-decoration: none;
+			margin-right: 5px;
+		}
+
+		.my-btn:hover {
+			color: black;
+		}
+
+		.my-btn.allow {
+			background-color: rgb(62, 62, 179);
+			cursor: pointer;
+		}
+
+		.my-btn.allow:active {
+			background-color: rgba(62, 62, 179, 0.459);
+			color: rgb(252, 7, 7);
+		}
+
+		.my-btn.disabled {
+			background-color: rgba(7, 7, 7, 0.616);
+			cursor: not-allowed;
+		}
+
+	</style>
+</head>
+
+</body>
+	<script src="https://cdn.jsdelivr.net/gh/t109598105/dicom2raw-demo@latest/Lib/dicomtoraw.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/gh/t109598105/ScoreOutputer@latest/dist/scoreoutputer.min.js"></script>
+
+	<div style="padding: 20px; margin: 10px; border-style: solid">
+		<div id="self-eval" style="float:right"></div>
+		
+		<h1> CorCTA Dicom 資料 </h1>
+		<div> 說明請參考 HTML 檔案的原始碼 </div>
+		<div>
+			<a id="choose-dir" class="my-btn disabled"> 選擇檔案夾 </a>
+		</div>
+		<div id="info"> 等待 Dicom... </div>
+		<div id="size"></div>
+		<div> 
+			<input style="width:500px" type="text" placeholder="檔名_長_寬_高_uint<位元>" id="file-name"> 
+		</div>
+		<div>
+			<canvas  id="myCanvas" ></canvas>
+		</div>
+		<div>
+			<a 
+				class="my-btn disabled"
+				id="download-button-8bit"
+				target="_blank"
+			> 下載 8-bit RAW 檔案</a>
+			<a 
+				class="my-btn disabled"
+				id="download-button-16bit"
+				target="_blank"
+			> 下載 16-bit RAW 檔案</a>
+		</div>
+		
+		
+	</div>
+
+	<script>
+		function convertRaw(){
+			var dicom2Raw = new Dicom2Raw();
+
+			dicom2Raw.readSeriesFromDir(
+				//null,
+				'dcm',
+				function(){
+					dicom2Raw.build();
+					document.getElementById('info').innerText = '讀取成功';
+					
+					var dimension = dicom2Raw.getDim();
+					document.getElementById('size').innerText = '尺寸: ' + dimension.x + ' x ' + dimension.y + ' x ' + dimension.z;
+
+					dicom2Raw.concatnate(function(){
+						document.getElementById('download-button-16bit').setAttribute('class', 'my-btn allow');
+						document.getElementById('download-button-8bit').setAttribute('class', 'my-btn allow');
+						document.getElementById('info').innerText = ('轉換完成');
+
+						//找到指定的影像arraybuffer
+						var image_buffer = new Uint16Array(dicom2Raw.getImagePixel(Math.floor(dimension.z/2)));
+						//找到canvas元素
+						var canvas = document.getElementById("myCanvas");
+						//創建Context對象
+						var ctx = canvas.getContext("2d");
+						//設定長寬
+						canvas.setAttribute("width", 512);
+						canvas.setAttribute("height", 512);
+						//建立影像
+						var image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+              			for (var i = 0; i < image_buffer.byteLength; i++) {
+                			image.data[4 * i] = (image_buffer[i] * 255) / 4095;
+                			image.data[4 * i + 1] = (image_buffer[i] * 255) / 4095;
+                			image.data[4 * i + 2] = (image_buffer[i] * 255) / 4095;
+                			image.data[4 * i + 3] = 255;
+              			}
+						//複製畫布上指定矩形的像素資料，然後將影像資料放回畫布
+						ctx.putImageData(image, 0, 0);
+						document.getElementById('info').innerText = ('顯示第' + Math.floor(dimension.z/2) + '張影像');
+						
+						var bit_16_data = new Uint16Array(dicom2Raw.rawData);
+						var bit_8_data = new Uint8Array(bit_16_data, bit_16_data.byteOffset, bit_16_data.byteLength / 2);
+
+						document.getElementById('download-button-16bit').addEventListener('click', function(){
+							var filename = document.getElementById('file-name').value;
+							Dicom2Raw.downloadData(
+								filename + '.raw',
+								dicom2Raw.rawData
+							);
+						});
+
+						document.getElementById('download-button-8bit').addEventListener('click', function(){
+							var filename = document.getElementById('file-name').value;
+							Dicom2Raw.downloadData(
+								filename + '.raw',
+								bit_8_data
+							);
+						})
+					});
+				}
+			);
+		};
+
+
+		window.onload = function(){
+			var chooseBtn = document.getElementById('choose-dir');
+			
+			chooseBtn.addEventListener('click', function(evt){
+				if(typeof chooseBtn.done == 'undefined'){
+					return;
+				}
+				
+				convertRaw();
+			});
+		
+		
+
+			if(!Dicom2Raw.isInstalled) {
+				Dicom2Raw.installLibrary(function(){
+					chooseBtn.setAttribute('class', 'my-btn allow');
+					chooseBtn.done = 1;
+				});
+			}
+			else {
+				chooseBtn.done = 1;
+			}
+
+
+
+			var so = new ScoreOutputer("109598030");
+			so.installCSS(function(){
+				so.addChild("成功讀取範例程式所附的 DICOM 檔案", 6, true);
+				so.addChild("轉換 DICOM 序列為 RAW 檔案", 1, true);
+				so.addChild("成功下載轉換好的 RAW 檔案", 1, true);
+				so.addChild("可下載 8 bit 或 16 bit 的 RAW 檔案", 1, true);
+				so.addChild("在網頁中顯示中間的圖像", 1, true);
+				
+				so.renderModal(
+					document.body,
+					'rgba(100,45,58,1)', 
+					'white', 
+					'15pt', 
+					'15px', 
+					'作業 7 自我評分表'
+				);
+				so.installDownloadBtn();
+				so.renderBtn(
+					document.getElementById('self-eval'),
+					"開啟自評表"
+				);
+			});
+		};
+	</script>
+</body>
+
+</html>
